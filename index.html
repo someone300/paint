@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pixel Painter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <div class="panel">
+      <h1>Pixel Painter</h1>
+      <p class="small">Draw pixel-perfect art, then export as PNG. Works with mouse & touch.</p>
+
+      <div class="controls">
+        <div>
+          <label class="small">Brush size: <span id="sizeLabel">12</span> px</label>
+          <input id="brushSize" type="range" min="1" max="64" value="12" />
+        </div>
+
+        <div>
+          <label class="small">Colors</label>
+          <div class="palette" id="palette"></div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <input id="customColor" type="color" value="#000000" class="colorPicker" />
+            <button class="btn" id="pickCustom">Pick</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="eraser">Eraser</button>
+          <button class="btn" id="fill">Fill</button>
+          <button class="btn" id="clear">Clear</button>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="undo">Undo</button>
+          <button class="btn" id="download">Download PNG</button>
+        </div>
+
+        <div class="row">
+          <label><input type="checkbox" id="gridToggle" /> Show grid</label>
+          <label style="margin-left:12px">Canvas size: </label>
+          <select id="canvasSize" style="margin-left:8px" class="btn">
+            <option value="32">32 x 32</option>
+            <option value="64" selected>64 x 64</option>
+            <option value="128">128 x 128</option>
+            <option value="256">256 x 256</option>
+          </select>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <div class="canvas-card">
+        <div class="top-actions">
+          <div>
+            <strong id="modeLabel">Drawing</strong>
+            <span class="muted">(drag to draw)</span>
+          </div>
+        </div>
+
+        <div class="stage" id="stage">
+          <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="footer">
+          <div id="coords">x: - y: -</div>
+          <div>Made with ❤️ — open the file in your browser to run</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
+<style>
+    :root{
+  --bg:#0f1724;
+  --card:#0b1220;
+  --accent:#7c3aed;
+  --muted:#94a3b8;
+  --glass: rgba(255,255,255,0.04);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+  background: linear-gradient(180deg,var(--bg), #051025 120%);
+  color:#e6eef8;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:28px;
+}
+
+.app{width:100%;max-width:1100px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;padding:18px;display:grid;grid-template-columns:330px 1fr;gap:18px;box-shadow:0 6px 30px rgba(2,6,23,0.6)}
+
+.panel{background:var(--card);padding:16px;border-radius:12px}
+h1{margin:0 0 8px;font-size:20px}
+.small{margin:0;color:var(--muted);font-size:13px}
+
+.controls{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.row{display:flex;gap:8px;align-items:center}
+.btn{background:var(--glass);border:1px solid rgba(255,255,255,0.03);padding:8px 10px;border-radius:8px;color:inherit;cursor:pointer;font-weight:600}
+.btn:hover{transform:translateY(-1px)}
+input[type=range]{width:100%}
+
+.palette{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{width:34px;height:34px;border-radius:6px;cursor:pointer;border:2px solid rgba(255,255,255,0.06)}
+.swatch.active{outline:3px solid rgba(124,58,237,0.25);transform:scale(1.05)}
+
+.canvas-wrap{display:flex;flex-direction:column;gap:12px}
+.canvas-card{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));border-radius:12px;padding:12px;display:flex;flex-direction:column;align-items:stretch}
+.stage{background:#081025;border-radius:8px;padding:10px;display:flex;justify-content:center;align-items:center}
+canvas{background:white;border-radius:6px;image-rendering:pixelated;touch-action:none}
+
+.footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted);font-size:13px}
+
+.top-actions{display:flex;gap:8px;align-items:center}
+.muted{color:var(--muted);margin-left:8px;font-size:13px}
+
+@media (max-width:900px){
+  .app{grid-template-columns:1fr;}
+}
+
+
+</style>
+
+<script>
+    (function(){
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const brushSizeInput = document.getElementById('brushSize');
+  const sizeLabel = document.getElementById('sizeLabel');
+  const paletteEl = document.getElementById('palette');
+  const customColor = document.getElementById('customColor');
+  const pickCustom = document.getElementById('pickCustom');
+  const eraserBtn = document.getElementById('eraser');
+  const clearBtn = document.getElementById('clear');
+  const downloadBtn = document.getElementById('download');
+  const fillBtn = document.getElementById('fill');
+  const undoBtn = document.getElementById('undo');
+  const gridToggle = document.getElementById('gridToggle');
+  const canvasSizeSel = document.getElementById('canvasSize');
+  const coords = document.getElementById('coords');
+  const modeLabel = document.getElementById('modeLabel');
+
+  let drawing=false, lastPos=null;
+  let color = '#000000';
+  let brushSize = parseInt(brushSizeInput.value,10);
+  let isEraser = false;
+  let canvasPixels = 64;
+  let scale = 8;
+
+  const undoStack = [];
+  const maxUndo = 10;
+
+  function pushUndo(){
+    try{
+      if(undoStack.length>=maxUndo) undoStack.shift();
+      undoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height));
+    }catch(e){ }
+  }
+
+  function undo(){
+    if(undoStack.length===0) return;
+    const img = undoStack.pop();
+    ctx.putImageData(img,0,0);
+  }
+
+  function setCanvasSize(n){
+    canvasPixels = n;
+    canvas.width = canvasPixels;
+    canvas.height = canvasPixels;
+    const displaySize = Math.min(640, canvasPixels * 8);
+    canvas.style.width = displaySize + 'px';
+    canvas.style.height = displaySize + 'px';
+    scale = canvas.style.width ? canvas.width / parseFloat(canvas.style.width) : 1;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    drawGrid();
+    pushUndo();
+  }
+
+  function drawGrid(){
+    if(!gridToggle.checked){
+      canvas.style.backgroundImage = 'none';
+      return;
+    }
+    const display = canvas.getBoundingClientRect();
+    const step = display.width / canvasPixels;
+    const line = 'linear-gradient(to right, rgba(0,0,0,0.08) 1px, transparent 1px)';
+    const vline = 'linear-gradient(to bottom, rgba(0,0,0,0.08) 1px, transparent 1px)';
+    canvas.style.backgroundImage = line + ', ' + vline;
+    canvas.style.backgroundSize = step + 'px ' + step + 'px, ' + step + 'px ' + step + 'px';
+    canvas.style.backgroundPosition = '0 0, 0 0';
+  }
+
+  function windowToCanvas(x,y){
+    const rect = canvas.getBoundingClientRect();
+    const cx = Math.floor((x - rect.left) * (canvas.width / rect.width));
+    const cy = Math.floor((y - rect.top) * (canvas.height / rect.height));
+    return {x:cx,y:cy};
+  }
+
+  function drawPoint(x,y,sz,col){
+    ctx.fillStyle = col;
+    const half = Math.floor(sz/2);
+    ctx.fillRect(x-half, y-half, sz, sz);
+  }
+
+  function handlePointerDown(e){
+    e.preventDefault();
+    drawing = true;
+    lastPos = null;
+    pushUndo();
+    handlePointerMove(e);
+  }
+  function handlePointerMove(e){
+    if(!drawing) {
+      const p = getPosFromEvent(e);
+      if(p) coords.textContent = `x: ${p.x}  y: ${p.y}`;
+      return;
+    }
+    const p = getPosFromEvent(e);
+    if(!p) return;
+    const col = isEraser ? '#ffffff' : color;
+    drawPoint(p.x,p.y,brushSize,col);
+    lastPos = p;
+  }
+  function handlePointerUp(e){
+    drawing=false;
+    lastPos=null;
+  }
+
+  function getPosFromEvent(e){
+    if(e.touches && e.touches[0]){
+      return windowToCanvas(e.touches[0].clientX, e.touches[0].clientY);
+    } else if(e.clientX!==undefined){
+      return windowToCanvas(e.clientX,e.clientY);
+    }
+    return null;
+  }
+
+  function floodFill(sx,sy,fillColor){
+    const w = canvas.width, h = canvas.height;
+    const img = ctx.getImageData(0,0,w,h);
+    const data = img.data;
+    function getIdx(x,y){return (y*w + x)*4}
+    const startIdx = getIdx(sx,sy);
+    const startR = data[startIdx], startG = data[startIdx+1], startB = data[startIdx+2], startA = data[startIdx+3];
+    const [r,g,b,a] = hexToRgba(fillColor);
+    if(startR===r && startG===g && startB===b && startA===a) return;
+    const stack = [[sx,sy]];
+    while(stack.length){
+      const [x,y] = stack.pop();
+      if(x<0||x>=w||y<0||y>=h) continue;
+      const idx = getIdx(x,y);
+      if(data[idx]===startR && data[idx+1]===startG && data[idx+2]===startB && data[idx+3]===startA){
+        data[idx]=r; data[idx+1]=g; data[idx+2]=b; data[idx+3]=255;
+        stack.push([x+1,y]);stack.push([x-1,y]);stack.push([x,y+1]);stack.push([x,y-1]);
+      }
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  function hexToRgba(hex){
+    const c = hex.replace('#','');
+    const bigint = parseInt(c,16);
+    if(c.length===6){
+      const r=(bigint>>16)&255;const g=(bigint>>8)&255;const b=(bigint)&255;return [r,g,b,255];
+    } else if(c.length===3){
+      const r = parseInt(c[0]+c[0],16);
+      const g = parseInt(c[1]+c[1],16);
+      const b = parseInt(c[2]+c[2],16);
+      return [r,g,b,255];
+    }
+    return [0,0,0,255];
+  }
+
+  const defaultColors = ['#000000','#ffffff','#e11d48','#fb923c','#facc15','#a3e635','#34d399','#60a5fa','#7c3aed','#f472b6'];
+
+  function makePalette(){
+    paletteEl.innerHTML='';
+    defaultColors.forEach(c=>{
+      const d = document.createElement('div');
+      d.className='swatch';
+      d.style.background = c;
+      d.title = c;
+      d.addEventListener('click',()=>{ selectColor(c,d); });
+      paletteEl.appendChild(d);
+    });
+    const first = paletteEl.children[0];
+    if(first) selectColor(defaultColors[0], first);
+  }
+
+  function selectColor(c,el){
+    color = c; isEraser=false; modeLabel.textContent='Drawing';
+    Array.from(paletteEl.children).forEach(ch=>ch.classList.remove('active'));
+    if(el) el.classList.add('active');
+  }
+
+  brushSizeInput.addEventListener('input',()=>{ brushSize = parseInt(brushSizeInput.value,10); sizeLabel.textContent=brushSize; });
+  pickCustom.addEventListener('click',()=>{ selectColor(customColor.value); });
+  eraserBtn.addEventListener('click',()=>{ isEraser = !isEraser; modeLabel.textContent = isEraser ? 'Eraser' : 'Drawing'; });
+  clearBtn.addEventListener('click',()=>{ pushUndo(); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height); });
+  downloadBtn.addEventListener('click',()=>{
+    const link = document.createElement('a');
+    const scaleUp = Math.max(1, Math.floor(512 / Math.max(canvas.width, canvas.height)));
+    const temp = document.createElement('canvas');
+    temp.width = canvas.width * scaleUp;
+    temp.height = canvas.height * scaleUp;
+    const tctx = temp.getContext('2d');
+    tctx.imageSmoothingEnabled = false;
+    tctx.drawImage(canvas, 0, 0, temp.width, temp.height);
+    link.href = temp.toDataURL('image/png');
+    link.download = 'pixel-art.png';
+    link.click();
+  });
+  undoBtn.addEventListener('click',undo);
+  gridToggle.addEventListener('change', drawGrid);
+  canvasSizeSel.addEventListener('change', (e)=> setCanvasSize(parseInt(e.target.value,10)));
+  fillBtn.addEventListener('click', ()=>{ pushUndo(); floodFill(Math.floor(canvas.width/2), Math.floor(canvas.height/2), color); });
+
+  ['pointerdown','pointermove','pointerup','pointerout'].forEach(ev=>{
+    canvas.addEventListener(ev, (e)=>{
+      if(ev==='pointerdown') handlePointerDown(e);
+      if(ev==='pointermove') handlePointerMove(e);
+      if(ev==='pointerup' || ev==='pointerout') handlePointerUp(e);
+    });
+  });
+
+  canvas.addEventListener('touchstart', handlePointerDown);
+  canvas.addEventListener('touchmove', handlePointerMove);
+  canvas.addEventListener('touchend', handlePointerUp);
+  canvas.addEventListener('mousemove', (e)=>{ const p=getPosFromEvent(e); if(p) coords.textContent = `x: ${p.x} y: ${p.y}`; });
+
+  makePalette();
+  setCanvasSize(parseInt(canvasSizeSel.value,10));
+  new ResizeObserver(()=> drawGrid()).observe(canvas);
+
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='z' && (e.ctrlKey||e.metaKey)) { e.preventDefault(); undo(); }
+    if(e.key==='e') { isEraser=true; modeLabel.textContent='Eraser'; }
+    if(e.key==='b') { isEraser=false; modeLabel.textContent='Drawing'; }
+  });
+})();
+
+</script>
